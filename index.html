@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>CryptoZombies front-end</title>
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/milligram/1.2.3/milligram.min.css">
+    <script language="javascript" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script language="javascript" type="text/javascript" src="./node_modules/web3/dist/web3.min.js"></script>
+    <script language="javascript" type="text/javascript" src="cryptozombies_abi.js"></script>
+  </head>
+  <body class="container">
+    <h2>CryptoZombie</h2>
+
+    <hr />
+
+    <div id="txStatus">
+      <div class="row">
+        <div class="column">
+          <label>Account Address</label>
+          <select id="AccountList"></select>
+        </div>
+      </div>
+    </div>
+
+    <hr />
+
+    <div class="column">
+      <h3>Transfer</h3>
+      <div id="Actions" class="row">
+        <div class="column">
+          <label>Zombie Name</label>
+          <input type="text" id="zombieInputName"  placeholder="name">
+        </div>
+        <div class="column">
+          <label><br /></label>
+          <button id="newRandomZombie">New Zombie</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="column">
+          <label>Target Account</label>
+          <input type="text" id="targetAccount" placeholder="address">
+        </div>
+        <div class="column">
+          <label>Your Zombie Id</label>
+          <input type="number" id="zombieId" placeholder="Zombie ID">
+        </div>
+        <div class="column">
+          <label><br /></label>
+          <button id="transferZombie">Transfer</button>
+          <button id="approveZombie">Approve</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="column">
+          <label>Request From</label>
+          <input id="requestFromAccount" type="text" placeholder="address (for future)">
+        </div>
+        <div class="column">
+          <label><br /></label>
+          <button id="requestZombieFrom">Request</button>
+        </div>
+      </div>
+      <div>
+        <p id="actionReport"></p>
+      </div>
+    </div>    
+
+    <hr />
+
+    <div class="column">
+      <h3>Attack</h3>
+      <div class="row">
+        <div class="column">
+          <label>Your Zombie Id</label>
+          <input type="number" id="myZombieIdForZombieAttack" placeholder="Your Zombie Id">
+        </div>
+        <div class="column">
+          <label>Enemy Id</label>
+          <input type="number" id="enemyId" placeholder="enemy Id">
+        </div>
+        <div class="column">
+          <label><br /></label>
+          <button id="zombieAttack">Attack</button>
+        </div>
+      </div>
+      <div class="row">
+          <div class="column">
+            <label>Your Zombie Id</label>
+            <input type="number" id="myZombieIdForKittyAttck" placeholder="Your Zombie Id">
+          </div>
+          <div class="column">
+            <label>Enemy Id</label>
+            <input type="number" id="kittyId" placeholder="Kitty Id">
+          </div>
+          <div class="column">
+            <label><br /></label>
+            <button id="kittyAttack">Attack</button>
+          </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <div id="zombies"></div>    
+
+    <script>
+      
+      var cryptoZombies;
+      var userAccount;
+
+      var el = function(id){ return document.querySelector(id); };
+
+      if (typeof web3 !== 'undefined') {
+        web3js = new Web3(web3.currentProvider);
+      } else {
+        web3js = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
+      }
+      
+      var cryptoZombiesAddress = "0x791d5cf1fcf86ab004a31b4deb1ef8c206cd36ab";
+      cryptoZombies = new web3js.eth.Contract(cryptozombiesABI, cryptoZombiesAddress);
+      
+      web3js.eth.getAccounts(function(error, accounts){
+        if(!error) {
+          userAccount = accounts[0];
+          web3js.eth.defaultAccount = accounts[0];
+          prepareAccountList(accounts);
+          getZombiesByOwner(userAccount)
+          .then(displayZombies)
+        } else {
+          console.log(error)
+        }
+      });
+
+      el("#AccountList").addEventListener("change", function() {
+          userAccount = el("#AccountList").value;
+          web3js.eth.defaultAccount = userAccount;
+          getZombiesByOwner(userAccount)
+          .then(displayZombies)
+      })
+
+      el("#newRandomZombie").addEventListener("click", function() {
+        createRandomZombie($("#zombieInputName").val());
+      })
+
+      el("#transferZombie").addEventListener("click", function() {
+        transferZombieTo($("#targetAccount").val(), $("#zombieId").val());
+      })
+
+      el("#zombieAttack").addEventListener("click", function() {
+        attackAtZombie($("#myZombieIdForZombieAttack").val(), $("#enemyId").val());
+      })
+
+      function prepareAccountList(accounts) {
+        accounts.forEach(address => {
+          AccountList.innerHTML += '<option value="' + address + '">'
+            + address + '</option>';
+        });
+      }
+
+      function refreshZombiesList() {
+        zombieIds = getZombiesByOwner(userAccount);
+        displayZombies(zombieIds);
+      }
+
+      function displayZombies(ids) {
+        $("#zombies").empty();
+        $("#zombies").append("<h3>Zombie List</h3>");
+        for (id of ids) {
+          getZombieDetails(id).then(function(zombie){
+            $("#zombies").append(`
+            <div class="row">
+              <div class="row">
+                <label>ID</label>
+                <blockquote><p><em id="id">${id}</em><br /><br /></p></blockquote>
+              </div>
+              <div class="column">
+                <label>Name</label>
+                <blockquote><p><em id="name">${zombie[0]}</em><br /><br /></p></blockquote>
+              </div>
+              <div class="column">
+                <label>DNA</label>
+                <blockquote><p><em id="dna">${zombie[1]}</em><br /><br /></p></blockquote>
+              </div>
+              <div class="column">
+                <label>Level</label>
+                <blockquote><p><em id="level">${zombie[2]}</em><br /><br /></p></blockquote>
+              </div>
+              <div class="column">
+                <label>ReadyTime</label>
+                <blockquote><p><em id="readyTime">${zombie[3]}</em><br /><br /></p></blockquote>
+              </div>
+              <div class="column">
+                <label>Wins</label>
+                <blockquote><p><em id="wins">${zombie[4]}</em><br /><br /></p></blockquote>
+              </div>
+              <div class="column">
+                <label>Losses<label>
+                <blockquote><p><em id="losses">${zombie[5]}</em><br /><br /></p></blockquote>
+              </div>              
+            </div>`);
+          })
+        }
+      }
+
+      function createRandomZombie(name) {
+        $("#actionReport").text("Creating new zombie on the blockchain. This may take a while...");
+        cryptoZombies.methods.createRandomZombie(name)
+        .send({from:userAccount, gas:3000000})
+        .on("receipt", function(receipt){
+          cryptoZombies.methods.getZombiesByOwner(userAccount).call()
+          .then(displayZombies)
+        })
+        .on("error", function(error){
+          console.log(error)
+        })
+      }
+
+      function transferZombieTo(_targetAddress, _zombieId) {
+        cryptoZombies.methods.transfer(_targetAddress, _zombieId)
+        .send({from: userAccount})
+        .on("receipt", function(receipt){
+          getZombiesByOwner(userAccount).then(displayZombies);
+        })
+        .on("error", function(error){
+          console.log(error)
+        })
+      }
+
+      function attackAtZombie(myZombieId, enemyZombiId) {
+        cryptoZombies.methods.attack(myZombieId, enemyZombiId)
+        .send({from: userAccount, gas:3000000})
+        .on("receipt", function(receipt){
+          getZombiesByOwner(userAccount).then(displayZombies);
+        })
+        .on("error", function(error){
+          console.log(error)
+        })
+      }
+
+      // function feedOnKitty(zombieId, kittyId) {
+      //   $("#txStatus").text("Eating a kitty. This may take a while...");
+      //   return CryptoZombies.methods.feedOnKitty(zombieId, KittyId)
+      //   .send({ from: userAccount })
+      //   .on("receipt", function(receipt) {
+      //     $("#txStatus").text("Ate a kitty and spawned a new Zombie!");
+      //     getZombiesByOwner(userAccount).then(displayZombies);
+      //   })
+      //   .on("error", function(error) {
+      //     $("#txStatus").text(error);
+      //   });
+      // }
+
+      function levelUp(zombieId) {
+        $("#txStatus").text("Leveling up your zombie...");
+        return CryptoZombies.methods.levelUp(zombieId)
+        .send({ from: userAccount, value: web3.utils.toWei("0.001") })
+        .on("receipt", function(receipt) {
+          $("#txStatus").text("Power overwhelming! Zombie successfully leveled up");
+        })
+        .on("error", function(error) {
+          $("#txStatus").text(error);
+        });
+      }
+
+      function getZombieDetails(id) {
+        return cryptoZombies.methods.zombies(id).call({from: userAccount});
+      }
+
+      function zombieToOwner(id) {
+        return cryptoZombies.methods.zombieToOwner(id).call({from: userAccount});
+      }
+
+      function getZombiesByOwner(owner) {
+        return cryptoZombies.methods.getZombiesByOwner(owner).call({from: userAccount});
+      }
+
+      
+    </script>
+  </body>
+</html>
+
